@@ -1,0 +1,60 @@
+name: 'terraform'
+
+on:
+  push:
+    branches:
+    - master
+  pull_request:
+
+steps:
+- uses: hashicorp/setup-terraform@v1
+  with:
+    terraform_version: 0.12.25
+
+- name: Terraform fmt
+  id: fmt
+  run: terraform fmt
+  continue-on-error: true
+
+- name: Terraform Init
+  id: init
+  run: terraform init
+
+- name: Terraform Validate
+  id: validate
+  run: terraform validate -no-color
+
+- name: Terraform Plan
+  id: plan
+  run: terraform plan -no-color
+  continue-on-error: true
+- run: echo ${{ steps.plan.outputs.stdout }}
+- run: echo ${{ steps.plan.outputs.stderr }}
+- run: echo ${{ steps.plan.outputs.exitcode }}
+
+- uses: actions/github-script@0.9.0
+  if: github.event_name == 'pull_request'
+  env:
+    PLAN: "terraform\n${{ steps.plan.outputs.stdout }}"
+  with:
+    github-token: ${{ secrets.GITHUB_TOKEN }}
+    script: |
+      const output = `#### Terraform Format and Style 🖌\`${{ steps.fmt.outcome }}\`
+      #### Terraform Initialization ⚙️\`${{ steps.init.outcome }}\`
+      #### Terraform Validation 🤖${{ steps.validate.outputs.stdout }}
+      #### Terraform Plan 📖\`${{ steps.plan.outcome }}\`
+      
+      <details><summary>Show Plan</summary>
+      
+      \`\`\`${process.env.PLAN}\`\`\`
+      
+      </details>
+      
+      *Pusher: @${{ github.actor }}, Action: \`${{ github.event_name }}\`, Working Directory: \`${{ env.tf_actions_working_dir }}\`, Workflow: \`${{ github.workflow }}\`*`;
+        
+      github.issues.createComment({
+        issue_number: context.issue.number,
+        owner: context.repo.owner,
+        repo: context.repo.repo,
+        body: output
+      })
